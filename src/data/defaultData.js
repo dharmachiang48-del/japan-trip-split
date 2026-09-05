@@ -20,41 +20,4 @@ export const CATEGORIES = [
   { id: 'other', name: '其他雜支', icon: 'MoreHorizontal', color: 'bg-slate-100 text-slate-700' }
 ];
 
-export const INITIAL_EXPENSES = [
-  {
-    id: 'exp_1',
-    title: '一蘭拉麵 (澀谷店)',
-    amount: 3960,
-    currency: 'JPY',
-    rate: 0.215,
-    payerId: 'mem_1',
-    splitMemberIds: ['mem_1', 'mem_2', 'mem_3'],
-    category: 'food',
-    date: '2026-09-04',
-    note: '包含加麵與溫泉蛋'
-  },
-  {
-    id: 'exp_2',
-    title: '東京晴空塔觀景台門票',
-    amount: 2160,
-    currency: 'TWD',
-    rate: 1.0, // 直接台幣扣款免換算
-    payerId: 'mem_2',
-    splitMemberIds: ['mem_1', 'mem_2', 'mem_3'],
-    category: 'ticket',
-    date: '2026-09-03',
-    note: 'Klook 刷卡台幣預訂'
-  },
-  {
-    id: 'exp_3',
-    title: '新幹線東京往京都車票',
-    amount: 42000,
-    currency: 'JPY',
-    rate: 0.215,
-    payerId: 'mem_3',
-    splitMemberIds: ['mem_1', 'mem_2', 'mem_3'],
-    category: 'traffic',
-    date: '2026-09-05',
-    note: '綠色車廂指定席'
-  }
-];
+export const INITIAL_EXPENSES = [];

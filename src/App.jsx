@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Header } from './components/Header';
 import { Navbar } from './components/Navbar';
 import { ExpenseList } from './components/ExpenseList';
@@ -15,38 +15,38 @@ import { fetchLiveJpyTwdRate, DEFAULT_JPY_TO_TWD_RATE } from './utils/currency';
 import { DEFAULT_MEMBERS, INITIAL_EXPENSES } from './data/defaultData';
 import { getGeminiApiKey } from './utils/gemini';
 import { realtimeSync } from './utils/realtimeSync';
+import {
+  loadCachedRoom,
+  saveServerRoom,
+  shouldApplyServerVersion
+} from './utils/roomCache';
 
-const STORAGE_KEY_TRIP_TITLE = 'japan_trip_title';
-const STORAGE_KEY_MEMBERS = 'japan_trip_members';
-const STORAGE_KEY_EXPENSES = 'japan_trip_expenses';
-const STORAGE_KEY_ROOM_ID = 'japan_trip_room_id';
+const DEFAULT_ROOM_STATE = {
+  tripTitle: '2026 日本東京自由行 🎌',
+  members: DEFAULT_MEMBERS,
+  expenses: INITIAL_EXPENSES
+};
 
 export default function App() {
   // 1. 房間與即時同步狀態
   const [roomId, setRoomId] = useState(() => {
     const urlParam = new URLSearchParams(window.location.search).get('room');
     if (urlParam) return urlParam.trim().toUpperCase();
-    return localStorage.getItem(STORAGE_KEY_ROOM_ID) || 'TOKYO-2026';
+    return localStorage.getItem('japan_trip_room_id') || 'TOKYO-2026';
   });
 
   const [syncStatus, setSyncStatus] = useState('connecting'); // 'connected', 'connecting', 'disconnected'
   const [onlineCount, setOnlineCount] = useState(1);
   const [isRoomModalOpen, setIsRoomModalOpen] = useState(false);
 
-  // 2. 旅程資料狀態
-  const [tripTitle, setTripTitle] = useState(() => {
-    return localStorage.getItem(STORAGE_KEY_TRIP_TITLE) || '2026 日本東京自由行 🎌';
-  });
-
-  const [members, setMembers] = useState(() => {
-    const saved = localStorage.getItem(STORAGE_KEY_MEMBERS);
-    return saved ? JSON.parse(saved) : DEFAULT_MEMBERS;
-  });
-
-  const [expenses, setExpenses] = useState(() => {
-    const saved = localStorage.getItem(STORAGE_KEY_EXPENSES);
-    return saved ? JSON.parse(saved) : INITIAL_EXPENSES;
-  });
+  // 2. 旅程資料狀態 (根據當前房間載入本地快取)
+  const initialData = loadCachedRoom(roomId, DEFAULT_ROOM_STATE);
+  const [tripTitle, setTripTitle] = useState(initialData.tripTitle);
+  const [members, setMembers] = useState(initialData.members);
+  const [expenses, setExpenses] = useState(initialData.expenses);
+  const [, setServerVersion] = useState(initialData.version);
+  const serverVersionRef = useRef(initialData.version);
+  const [syncError, setSyncError] = useState(null);
 
   // 3. 匯率狀態
   const [currentRate, setCurrentRate] = useState(DEFAULT_JPY_TO_TWD_RATE);
@@ -65,23 +65,6 @@ export default function App() {
   const [activeAiPhoto, setActiveAiPhoto] = useState(null);
   const [hasApiKey, setHasApiKey] = useState(false);
 
-  // 儲存至本地快取
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEY_ROOM_ID, roomId);
-  }, [roomId]);
-
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEY_TRIP_TITLE, tripTitle);
-  }, [tripTitle]);
-
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEY_MEMBERS, JSON.stringify(members));
-  }, [members]);
-
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEY_EXPENSES, JSON.stringify(expenses));
-  }, [expenses]);
-
   // 初始化匯率與 API Key 狀態
   useEffect(() => {
     updateLiveRate();
@@ -96,7 +79,32 @@ export default function App() {
 
   // 即時協作 WebSocket 連線與監聽
   useEffect(() => {
-    realtimeSync.connect(roomId);
+    // 本機快取只可建立資料庫尚不存在的新房間，不能覆蓋既有伺服器資料。
+    const getClientData = () => {
+      const current = loadCachedRoom(roomId, DEFAULT_ROOM_STATE);
+      return {
+        tripTitle: current.tripTitle,
+        members: current.members,
+        expenses: current.expenses
+      };
+    };
+
+    const applyServerData = (serverData) => {
+      if (!serverData) return;
+      const nextData = {
+        tripTitle: serverData.tripTitle || DEFAULT_ROOM_STATE.tripTitle,
+        members: Array.isArray(serverData.members) ? serverData.members : [],
+        expenses: Array.isArray(serverData.expenses) ? serverData.expenses : [],
+        version: Number(serverData.version) || 0
+      };
+      setTripTitle(nextData.tripTitle);
+      setMembers(nextData.members);
+      setExpenses(nextData.expenses);
+      serverVersionRef.current = nextData.version;
+      setServerVersion(nextData.version);
+      saveServerRoom(roomId, nextData);
+      setSyncError(null);
+    };
 
     // 監聽連線狀態
     const unStatus = realtimeSync.on('status_change', ({ status, onlineCount: count }) => {
@@ -108,80 +116,97 @@ export default function App() {
       setOnlineCount(count);
     });
 
-    // 監聽伺服器初始化房間資料
+    // 加入房間後永遠採用伺服器回傳的權威狀態。
     const unInit = realtimeSync.on('init_state', (serverData) => {
-      if (serverData) {
-        if (serverData.tripTitle) setTripTitle(serverData.tripTitle);
-        if (serverData.members && serverData.members.length > 0) setMembers(serverData.members);
-        if (serverData.expenses && serverData.expenses.length > 0) setExpenses(serverData.expenses);
-        // 若伺服器為空，將本機預設資料上傳至伺服器
-        if ((!serverData.expenses || serverData.expenses.length === 0) && expenses.length > 0) {
-          realtimeSync.broadcastFullState({
-            tripTitle,
-            members,
-            expenses
-          });
-        }
+      applyServerData(serverData);
+    });
+
+    // 只套用版本不舊於目前畫面的已提交完整狀態。
+    const unState = realtimeSync.on('state_updated', (serverData) => {
+      if (!serverData) return;
+      if (shouldApplyServerVersion(serverVersionRef.current, serverData.version)) {
+        applyServerData(serverData);
       }
     });
 
-    // 監聽其他旅伴即時新增支出
-    const unAddExp = realtimeSync.on('expense_added', (newExp) => {
-      setExpenses(prev => {
-        if (prev.some(e => e.id === newExp.id)) return prev;
-        return [newExp, ...prev];
-      });
+    const unSyncError = realtimeSync.on('sync_error', (message) => {
+      setSyncError(message);
     });
 
-    // 監聽其他旅伴修改支出
-    const unUpdateExp = realtimeSync.on('expense_updated', (updated) => {
-      setExpenses(prev => prev.map(e => e.id === updated.id ? updated : e));
-    });
-
-    // 監聽其他旅伴刪除支出
-    const unDeleteExp = realtimeSync.on('expense_deleted', (expId) => {
-      setExpenses(prev => prev.filter(e => e.id !== expId));
-    });
-
-    // 監聽其他旅伴更新成員
-    const unMembers = realtimeSync.on('members_updated', (newMembers) => {
-      setMembers(newMembers);
-    });
+    realtimeSync.connect(roomId, getClientData);
 
     return () => {
       unStatus();
       unOnline();
       unInit();
-      unAddExp();
-      unUpdateExp();
-      unDeleteExp();
-      unMembers();
+      unState();
+      unSyncError();
     };
   }, [roomId]);
 
   // 切換房間
   const handleSwitchRoom = (newRoomId) => {
-    setRoomId(newRoomId);
+    const cleanId = (newRoomId || 'TOKYO-2026').trim().toUpperCase();
+    setRoomId(cleanId);
+    localStorage.setItem('japan_trip_room_id', cleanId);
     const url = new URL(window.location.href);
-    url.searchParams.set('room', newRoomId);
+    url.searchParams.set('room', cleanId);
     window.history.pushState({}, '', url.toString());
-    realtimeSync.connect(newRoomId);
+
+    // 載入新房間的本地快取資料
+    const nextData = loadCachedRoom(cleanId, DEFAULT_ROOM_STATE);
+    setTripTitle(nextData.tripTitle);
+    setMembers(nextData.members);
+    setExpenses(nextData.expenses);
+    serverVersionRef.current = nextData.version;
+    setServerVersion(nextData.version);
+    setSyncError(null);
   };
 
-  // 支出增刪改查（附帶即時廣播）
+  // 支出增刪改查：先更新畫面快取，伺服器提交後會回傳權威版本。
   const handleSaveExpense = (newExp) => {
+    setSyncError(null);
+
     if (editingExpense) {
-      setExpenses(prev => prev.map(e => e.id === newExp.id ? newExp : e));
+      setExpenses(prev => {
+        const next = prev.map(e => e.id === newExp.id ? newExp : e);
+        saveServerRoom(roomId, {
+          tripTitle,
+          members,
+          expenses: next,
+          version: serverVersionRef.current
+        });
+        return next;
+      });
       realtimeSync.broadcastExpenseUpdated(newExp);
     } else {
-      setExpenses(prev => [newExp, ...prev]);
+      setExpenses(prev => {
+        const next = [newExp, ...prev];
+        saveServerRoom(roomId, {
+          tripTitle,
+          members,
+          expenses: next,
+          version: serverVersionRef.current
+        });
+        return next;
+      });
       realtimeSync.broadcastExpenseAdded(newExp);
     }
   };
 
   const handleDeleteExpense = (id) => {
     if (confirm('確定要刪除這筆支出嗎？所有同房間的旅伴也會同步刪除。')) {
-      setExpenses(prev => prev.filter(e => e.id !== id));
+      setSyncError(null);
+      setExpenses(prev => {
+        const next = prev.filter(e => e.id !== id);
+        saveServerRoom(roomId, {
+          tripTitle,
+          members,
+          expenses: next,
+          version: serverVersionRef.current
+        });
+        return next;
+      });
       realtimeSync.broadcastExpenseDeleted(id);
     }
   };
@@ -197,8 +222,31 @@ export default function App() {
   };
 
   const handleUpdateMembers = (newMembers) => {
+    setSyncError(null);
     setMembers(newMembers);
+    saveServerRoom(roomId, {
+      tripTitle,
+      members: newMembers,
+      expenses,
+      version: serverVersionRef.current
+    });
     realtimeSync.broadcastMembersUpdated(newMembers);
+  };
+
+  const handleUpdateTripTitle = (newTitle) => {
+    setSyncError(null);
+    setTripTitle(newTitle);
+    saveServerRoom(roomId, {
+      tripTitle: newTitle,
+      members,
+      expenses,
+      version: serverVersionRef.current
+    });
+    realtimeSync.broadcastFullState({
+      tripTitle: newTitle,
+      members,
+      expenses
+    });
   };
 
   // 從匯率計算器或 OCR 帶入金額
@@ -229,10 +277,7 @@ export default function App() {
       {/* 頂部導覽列 (含即時連線狀態與在線人數) */}
       <Header
         tripTitle={tripTitle}
-        setTripTitle={(title) => {
-          setTripTitle(title);
-          realtimeSync.broadcastFullState({ tripTitle: title, members, expenses });
-        }}
+        setTripTitle={handleUpdateTripTitle}
         currentRate={currentRate}
         rateSource={rateSource}
         refreshRate={updateLiveRate}
@@ -242,6 +287,7 @@ export default function App() {
         hasApiKey={hasApiKey}
         roomId={roomId}
         syncStatus={syncStatus}
+        syncError={syncError}
         onlineCount={onlineCount}
         onOpenRoomShare={() => setIsRoomModalOpen(true)}
       />

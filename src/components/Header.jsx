@@ -14,6 +14,7 @@ export function Header({
   hasApiKey,
   roomId,
   syncStatus,
+  syncError,
   onlineCount,
   onOpenRoomShare
 }) {
@@ -80,13 +81,21 @@ export function Header({
           <button
             onClick={onOpenRoomShare}
             className="flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold transition-colors border border-slate-200"
-            title="多人即時連線房間設定與 QR Code"
+            title={syncError || '多人即時連線房間設定與 QR Code'}
           >
             <span className={`w-2 h-2 rounded-full ${
-              syncStatus === 'connected' ? 'bg-emerald-500 animate-pulse' : syncStatus === 'connecting' ? 'bg-amber-500' : 'bg-rose-500'
+              syncError
+                ? 'bg-rose-500'
+                : syncStatus === 'connected'
+                  ? 'bg-emerald-500 animate-pulse'
+                  : syncStatus === 'connecting'
+                    ? 'bg-amber-500'
+                    : 'bg-rose-500'
             }`} />
             <span className="hidden sm:inline font-mono">{roomId}</span>
-            <span className="text-[10px] text-slate-500">({onlineCount}人)</span>
+            <span className="text-[10px] text-slate-500">
+              {syncError ? '未儲存' : `(${onlineCount}人)`}
+            </span>
           </button>
 
           {/* OCR Quick Price Scan Button */}
