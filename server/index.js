@@ -234,6 +234,11 @@ if (fs.existsSync(DIST_DIR)) {
   app.use((req, res) => {
     res.sendFile(path.join(DIST_DIR, 'index.html'));
   });
+} else {
+  console.warn(`⚠️ Warning: ${DIST_DIR} not found.`);
+  app.use((req, res) => {
+    res.status(200).send(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Japan Trip Split</title></head><body style="font-family:sans-serif;padding:40px;text-align:center;"><h1>🎌 日本旅遊分帳伺服器已連線</h1><p>伺服器已成功運行，靜態資源準備中，請於 30 秒後重新整理此頁面。</p></body></html>`);
+  });
 }
 
 server.listen(PORT, '0.0.0.0', () => {
