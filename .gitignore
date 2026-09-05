@@ -1,4 +1,4 @@
-﻿# Logs
+# Logs
 logs
 *.log
 npm-debug.log*
@@ -22,3 +22,11 @@ Thumbs.db
 
 # AI / Local caches
 .gemini
+
+# Isolated development worktrees
+.worktrees/
+
+# Server data files (keep directory via .gitkeep)
+server/data/*.json
+!server/data/.gitkeep
+
