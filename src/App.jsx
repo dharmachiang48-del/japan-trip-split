@@ -22,7 +22,7 @@ import {
 } from './utils/roomCache';
 
 const DEFAULT_ROOM_STATE = {
-  tripTitle: '2026 日本東京自由行 🎌',
+  tripTitle: '2026 日本沖繩自由行 🌺',
   members: DEFAULT_MEMBERS,
   expenses: INITIAL_EXPENSES
 };

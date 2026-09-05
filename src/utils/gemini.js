@@ -3,7 +3,12 @@
 const GEMINI_API_KEY_STORAGE = 'japan_trip_gemini_key';
 const GEMINI_MODEL_STORAGE = 'japan_trip_gemini_model';
 
-export const DEFAULT_GEMINI_MODEL = 'gemini-1.5-flash';
+export const DEFAULT_GEMINI_MODEL = 'gemini-3.6-flash';
+const SUPPORTED_GEMINI_MODELS = new Set([DEFAULT_GEMINI_MODEL]);
+
+export function normalizeGeminiModel(model) {
+  return SUPPORTED_GEMINI_MODELS.has(model) ? model : DEFAULT_GEMINI_MODEL;
+}
 
 export function getGeminiApiKey() {
   return localStorage.getItem(GEMINI_API_KEY_STORAGE) || '';
@@ -18,11 +23,64 @@ export function saveGeminiApiKey(key) {
 }
 
 export function getGeminiModel() {
-  return localStorage.getItem(GEMINI_MODEL_STORAGE) || DEFAULT_GEMINI_MODEL;
+  const storedModel = localStorage.getItem(GEMINI_MODEL_STORAGE);
+  const model = normalizeGeminiModel(storedModel);
+  if (storedModel && storedModel !== model) {
+    localStorage.setItem(GEMINI_MODEL_STORAGE, model);
+  }
+  return model;
 }
 
 export function saveGeminiModel(model) {
-  localStorage.setItem(GEMINI_MODEL_STORAGE, model);
+  localStorage.setItem(GEMINI_MODEL_STORAGE, normalizeGeminiModel(model));
+}
+
+function geminiEndpoint(model, apiKey) {
+  return `https://generativelanguage.googleapis.com/v1beta/models/${normalizeGeminiModel(model)}:generateContent?key=${apiKey}`;
+}
+
+async function readGeminiError(response) {
+  const errorData = await response.json().catch(() => ({}));
+  const detail = errorData?.error?.message || `HTTP ${response.status} 錯誤`;
+  const normalized = detail.toLowerCase();
+
+  if (normalized.includes('no longer available') || normalized.includes('not found')) {
+    return '所選 Gemini 模型已停用，請重新儲存設定以切換到最新模型。';
+  }
+  if (response.status === 400 || response.status === 401 || response.status === 403) {
+    return 'API Key 無效、權限不足或尚未啟用 Gemini API，請到 Google AI Studio 檢查。';
+  }
+  if (response.status === 429) {
+    return 'Gemini 免費額度暫時用完或請求過於頻繁，請稍後再試。';
+  }
+  return `Gemini API 回應異常：${detail}`;
+}
+
+export async function validateGeminiApiKey({
+  apiKey,
+  model = DEFAULT_GEMINI_MODEL,
+  fetchImpl = fetch
+}) {
+  const activeKey = apiKey?.trim();
+  if (!activeKey) return { ok: false, message: '請先輸入 API Key' };
+
+  try {
+    const response = await fetchImpl(geminiEndpoint(model, activeKey), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ role: 'user', parts: [{ text: '請只回覆 OK' }] }],
+        generationConfig: { maxOutputTokens: 8 }
+      })
+    });
+
+    if (!response.ok) {
+      return { ok: false, message: await readGeminiError(response) };
+    }
+    return { ok: true, message: 'API Key 連線成功' };
+  } catch {
+    return { ok: false, message: '無法連線至 Gemini，請檢查網路後再試。' };
+  }
 }
 
 /**
@@ -83,7 +141,7 @@ export async function queryGeminiVision({ apiKey, imageDataBase64, question, his
   }
 
   const model = getGeminiModel();
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${activeKey}`;
+  const endpoint = geminiEndpoint(model, activeKey);
 
   const systemInstruction = `你是一位專業且熱情貼心的「日本自由行與美食視覺 AI 導遊助手」。
 你擅長辨識日本菜單、便利商店標籤、藥妝店成分表、店家消費明細與景點票券。
@@ -138,9 +196,7 @@ export async function queryGeminiVision({ apiKey, imageDataBase64, question, his
     });
 
     if (!response.ok) {
-      const errData = await response.json().catch(() => ({}));
-      const msg = errData?.error?.message || `HTTP ${response.status} 錯誤`;
-      throw new Error(`Gemini API 回應異常：${msg}`);
+      throw new Error(await readGeminiError(response));
     }
 
     const data = await response.json();
@@ -162,7 +218,7 @@ export async function queryGeminiVision({ apiKey, imageDataBase64, question, his
 function generateDemoResponse(question) {
   return new Promise((resolve) => {
     setTimeout(() => {
-      resolve(`💡 **【AI 助手示範模式】**\n\n您詢問了：「*${question}*」\n\n📌 **這是一張日本旅遊相片範例解析：**\n- **主要品項**：日式豚骨拉麵（特製とんこつラーメン）\n- **日幣價格**：¥980（含稅 10% 約 NT$ 210）\n- **主要食材**：自家熬製濃郁豚骨高湯、炙燒叉燒肉 2 片、糖心蛋（味玉）、青蔥、特選海苔。\n- **過敏原提醒**：含有大豆、小麥、豬肉製品；無牛肉成分。\n- **實用點餐日語**：\n  - 「これをお願いします (Kore o onegaishimasu)」👉 *我要點這個*\n  - 「麺かためで (Men katame de)」👉 *麵條要偏硬*\n\n> 🔑 **提示**：若要進行真實圖片的多模態即時深度解析，請點擊上方 **「設定 API Key」** 輸入您的 Google Gemini API Key（可在 Google AI Studio 免費申請取得），即可無限享受專屬旅遊 AI 視覺諮詢！`);
+      resolve(`💡 **【AI 助手示範模式】**\n\n您詢問了：「*${question}*」\n\n📌 **這是一張日本旅遊相片範例解析：**\n- **主要品項**：日式豚骨拉麵（特製とんこつラーメン）\n- **日幣價格**：¥980（含稅 10% 約 NT$ 210）\n- **主要食材**：自家熬製濃郁豚骨高湯、炙燒叉燒肉 2 片、糖心蛋（味玉）、青蔥、特選海苔。\n- **過敏原提醒**：含有大豆、小麥、豬肉製品；無牛肉成分。\n- **實用點餐日語**：\n  - 「これをお願いします (Kore o onegaishimasu)」👉 *我要點這個*\n  - 「麺かためで (Men katame de)」👉 *麵條要偏硬*\n\n> 🔑 **提示**：若要進行真實圖片的多模態即時深度解析，請點擊上方 **「設定 API Key」** 輸入您的 Google Gemini API Key（可在 Google AI Studio 申請取得），即可依 Google 提供的 API 額度使用旅遊 AI 視覺諮詢。`);
     }, 600);
   });
 }

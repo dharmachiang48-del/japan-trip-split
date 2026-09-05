@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Camera, Users, RefreshCw, Sparkles, SlidersHorizontal, Key } from 'lucide-react';
 import { formatTWD } from '../utils/currency';
 
@@ -19,7 +19,29 @@ export function Header({
   onOpenRoomShare
 }) {
   const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const [draftTitle, setDraftTitle] = useState(tripTitle);
   const [isRefreshing, setIsRefreshing] = useState(false);
+
+  useEffect(() => {
+    if (!isEditingTitle) setDraftTitle(tripTitle);
+  }, [tripTitle, isEditingTitle]);
+
+  const beginTitleEdit = () => {
+    setDraftTitle(tripTitle);
+    setIsEditingTitle(true);
+  };
+
+  const commitTitleEdit = () => {
+    const nextTitle = draftTitle.trim();
+    if (nextTitle && nextTitle !== tripTitle) setTripTitle(nextTitle);
+    else setDraftTitle(tripTitle);
+    setIsEditingTitle(false);
+  };
+
+  const cancelTitleEdit = () => {
+    setDraftTitle(tripTitle);
+    setIsEditingTitle(false);
+  };
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
@@ -40,16 +62,19 @@ export function Header({
             {isEditingTitle ? (
               <input
                 type="text"
-                value={tripTitle}
-                onChange={(e) => setTripTitle(e.target.value)}
-                onBlur={() => setIsEditingTitle(false)}
-                onKeyDown={(e) => e.key === 'Enter' && setIsEditingTitle(false)}
+                value={draftTitle}
+                onChange={(e) => setDraftTitle(e.target.value)}
+                onBlur={commitTitleEdit}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') commitTitleEdit();
+                  if (e.key === 'Escape') cancelTitleEdit();
+                }}
                 autoFocus
                 className="font-bold text-slate-800 text-base border-b-2 border-rose-500 bg-transparent outline-none px-1 py-0.5"
               />
             ) : (
               <h1
-                onClick={() => setIsEditingTitle(true)}
+                onClick={beginTitleEdit}
                 className="font-bold text-slate-800 text-base sm:text-lg truncate cursor-pointer hover:text-rose-600 transition-colors flex items-center gap-1.5"
                 title="點擊修改旅程名稱"
               >

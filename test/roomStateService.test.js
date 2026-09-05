@@ -1,7 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { RoomStateService } from '../server/roomStateService.js';
+import { DEFAULT_TRIP_TITLE, RoomStateService, normalizeRoomState } from '../server/roomStateService.js';
 import { VersionConflictError } from '../server/storage/roomStoreErrors.js';
+
+test('empty room state starts with the Okinawa trip title', () => {
+  assert.equal(DEFAULT_TRIP_TITLE, '2026 日本沖繩自由行 🌺');
+  assert.equal(normalizeRoomState({}).tripTitle, '2026 日本沖繩自由行 🌺');
+});
 
 class InMemoryRoomStore {
   constructor() {

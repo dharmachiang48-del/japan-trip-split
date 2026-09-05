@@ -1,4 +1,4 @@
-export const DEFAULT_TRIP_TITLE = '2026 日本東京自由行 🎌';
+export const DEFAULT_TRIP_TITLE = '2026 日本沖繩自由行 🌺';
 
 export function normalizeRoomId(value) {
   return String(value || 'TOKYO-2026').trim().toUpperCase() || 'TOKYO-2026';
