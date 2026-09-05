@@ -1,49 +1,77 @@
-﻿# 🚀 日本旅遊雙幣分帳 App：24/7 免費雲端永久部署指引
+# 日本旅遊分帳 App 部署指南
 
-本專案已完成**單一服務整合架構**（Express 同時提供前端 Vite 靜態網頁 + 後端 WebSocket 即時分帳同步）。
-部署到免費雲端平台後，**即使關閉本機電腦或程式，手機與旅伴仍能 24 小時隨時連線記帳**！
+本專案由同一個 Node.js 服務提供 Vite 前端、Express API 與 WebSocket 多人即時同步。正式環境的房間資料必須存放在 PostgreSQL；Render Web Service 的本機檔案系統不是正式資料來源，服務重新啟動或重新部署後不保證保留執行期檔案。
 
----
+## 架構
 
-## ⭐️ 推薦部署方式一：Render.com（完全免費、自動 HTTPS）
+- Render：執行網站、API 與 WebSocket。
+- Neon PostgreSQL：保存每個房間的標題、成員、支出與伺服器版本。
+- 瀏覽器 `localStorage`：只作房間快取；資料庫已有房間時，以伺服器資料為準。
+- 未設定 `DATABASE_URL` 的本機開發：使用 `server/data` JSON 備援儲存。
 
-### 步驟 1：建立 GitHub 儲存庫並推送程式碼
-1. 開啟 [GitHub.com](https://github.com/) 並登入你的帳號。
-2. 點擊右上角的 **+** 號 ➡️ **New repository**。
-3. Repository name 填寫：japan-trip-split（可選 Private 私人或 Public 公開）。
-4. **不要勾選** Initialize with README，直接點擊 **Create repository**。
-5. 在本機專案目錄的終端機或 PowerShell 中執行下列兩行指令（請將 <你的GitHub帳號> 替換為你的帳號）：
-   `ash
-   git remote add origin https://github.com/<你的GitHub帳號>/japan-trip-split.git
-   git push -u origin main
-   `
+## 1. 建立 Neon PostgreSQL
 
----
+1. 登入 Neon 並建立一個 PostgreSQL project。
+2. 在 Neon 的連線資訊頁選擇 pooled connection string。
+3. 複製 PostgreSQL 連線字串，並確認包含 `sslmode=require`。
+4. 不要把連線字串貼進程式碼、`render.yaml`、`.env` 範例或 GitHub。
 
-### 步驟 2：在 Render 一鍵免費部署
-1. 開啟 [Render.com](https://render.com/)，點擊 **Sign Up** 並選擇 **GitHub** 登入。
-2. 點擊右上角 **New +** ➡️ **Web Service**。
-3. 在專案清單中找到剛才推送的 japan-trip-split，點擊 **Connect**。
-4. 設定確認（通常 Render 會自動透過專案內的 ender.yaml 偵測完畢）：
-   - **Name**: japan-trip-split（或你自訂的名稱）
-   - **Region**: 建議選擇 Singapore（新加坡，對台灣與日本連線速度最快）
-   - **Branch**: main
-   - **Runtime**: Node
-   - **Build Command**: 
-pm install && npm run build
-   - **Start Command**: 
-pm start
-   - **Instance Type**: 選擇 **Free**（/月）
-5. 點擊最下方的 **Create Web Service**！
-6. 等待約 1~2 分鐘，看到綠色 Live 後，上方就會出現專屬的永久 HTTPS 網址（例如：https://japan-trip-split.onrender.com）。
-7. 將此網址分享給旅伴，所有人的電腦與手機都能 24 小時永久連線分帳，電腦關機完全不影響！
+Neon 與 Render 的方案、免費額度及休眠政策可能調整，請以各自帳號儀表板顯示的最新資訊為準。
 
----
+## 2. 在 Render 設定網站
 
-## ⭐️ 推薦部署方式二：Zeabur（台灣團隊開發，支援中文介面，極速部署）
+1. 在 Render 建立或開啟 Web Service `japan-trip-split`。
+2. 連接 GitHub repository `dharmachiang48-del/japan-trip-split`，部署分支選擇要上線的分支。
+3. 確認建置設定：
+   - Runtime：Node
+   - Build Command：`npm install && npm run build`
+   - Start Command：`npm start`
+4. 開啟服務的 Environment 設定。
+5. 新增 Secret：
+   - Key：`DATABASE_URL`
+   - Value：Neon pooled PostgreSQL connection string
+6. 儲存後重新部署目前 commit。
 
-1. 開啟 [Zeabur.com](https://zeabur.com/) 並使用 GitHub 登入。
-2. 點擊 **建立新專案 (Create Project)**。
-3. 點擊 **部署服務 (Deploy Service)** ➡️ **Git** ➡️ 選擇 japan-trip-split。
-4. Zeabur 會全自動偵測並執行 build 與 start。
-5. 部署完成後，在該服務的 **網域名稱 (Networking)** 區塊點擊 **產生網域 (Generate Domain)**，即可取得免費且永久的 *.zeabur.app 網址！
+`render.yaml` 只宣告 `DATABASE_URL` 必須由部署者提供，不包含實際密碼。
+
+## 3. 確認 PostgreSQL 已啟用
+
+部署完成後開啟：
+
+```text
+https://japan-trip-split.onrender.com/api/health
+```
+
+回應必須包含：
+
+```json
+{
+  "status": "ok",
+  "storage": "postgresql"
+}
+```
+
+`time` 欄位會依檢查時間不同。若 `storage` 顯示 `file`，代表 Render 尚未正確設定 `DATABASE_URL`，不可視為持久化部署完成。
+
+## 4. 多人與重啟驗收
+
+1. 使用新的測試房間名稱進入網站。
+2. 瀏覽器 A 新增一位成員與一筆支出。
+3. 使用瀏覽器 B 或無痕視窗開啟相同房間網址，確認資料一致。
+4. 在 Render 重新部署目前 commit，等待服務恢復為 Live。
+5. 重新開啟相同房間，確認標題、成員、支出與結算結果仍存在。
+6. 再由瀏覽器 B 新增一筆支出，確認瀏覽器 A 即時收到完整更新。
+
+只有上述跨瀏覽器與重新部署驗收都通過，才能確認正式網站的持久化修復完成。
+
+## 5. 本機開發
+
+未設定 `DATABASE_URL` 時執行：
+
+```powershell
+npm install
+npm run build
+npm start
+```
+
+本機資料會寫入 `server/data/room_*.json`。這些執行期檔案已由 `.gitignore` 排除，只有 `server/data/.gitkeep` 會保留在 Git。

@@ -5,7 +5,7 @@ import { createRoomStore } from '../server/storage/createRoomStore.js';
 test('selects PostgreSQL when DATABASE_URL is configured', () => {
   const pool = { query() {}, end() {} };
   const store = createRoomStore({
-    databaseUrl: 'postgresql://example.invalid/trips',
+    databaseUrl: 'configured',
     dataDir: 'unused',
     pool
   });

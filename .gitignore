@@ -26,7 +26,7 @@ Thumbs.db
 # Isolated development worktrees
 .worktrees/
 
-# Server data files (keep directory via .gitkeep)
+# Server runtime room data (local fallback only)
 server/data/*.json
 !server/data/.gitkeep
 
