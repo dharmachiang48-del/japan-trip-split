@@ -127,11 +127,11 @@ export function Header({
           <button
             onClick={onOpenOcr}
             className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-rose-500 to-rose-600 hover:from-rose-600 hover:to-rose-700 text-white rounded-xl text-xs sm:text-sm font-medium shadow-sm shadow-rose-200 transition-all active:scale-95"
-            title="拍照識別價格並自動換匯"
+            title="掃描日幣價格並自動換匯"
           >
             <Camera size={16} />
-            <span className="hidden sm:inline">拍照辨識價格</span>
-            <span className="sm:hidden">拍價</span>
+            <span className="hidden sm:inline">掃描日幣價格</span>
+            <span className="sm:hidden">掃價</span>
           </button>
 
           {/* Members Button */}

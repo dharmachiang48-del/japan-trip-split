@@ -38,5 +38,6 @@
 }
 
 .animate-scan {
+  position: absolute;
   animation: scanline 2.5s ease-in-out infinite;
 }

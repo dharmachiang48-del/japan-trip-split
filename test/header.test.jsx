@@ -58,3 +58,14 @@ test('Escape cancels a trip title edit without synchronizing it', () => {
   assert.deepEqual(committed, []);
   assert.equal(renderer.root.findByType('h1').children[0], '2026 日本東京自由行 🎌');
 });
+
+test('the scanner shortcut describes both live and photo scanning', () => {
+  let renderer;
+  act(() => {
+    renderer = renderHeader(() => {});
+  });
+
+  const shortcut = renderer.root.findAllByType('button')
+    .find((button) => button.props.title === '掃描日幣價格並自動換匯');
+  assert.ok(shortcut);
+});

@@ -2,49 +2,87 @@
 import { createWorker } from 'tesseract.js';
 
 /**
+ * 即時掃描需要連續看到同一個價格，才把它視為穩定結果。
+ */
+export function updatePriceStability(previous, detectedPrices, requiredMatches = 2) {
+  const candidateAmount = detectedPrices?.[0]?.amount ?? null;
+  if (!candidateAmount) {
+    return { candidateAmount: null, consecutiveMatches: 0, stableAmount: null };
+  }
+
+  const consecutiveMatches = previous?.candidateAmount === candidateAmount
+    ? previous.consecutiveMatches + 1
+    : 1;
+
+  return {
+    candidateAmount,
+    consecutiveMatches,
+    stableAmount: consecutiveMatches >= requiredMatches ? candidateAmount : null
+  };
+}
+
+/**
+ * 建立可重複使用的 OCR 掃描器。即時相機模式會共用同一個 worker，
+ * 避免每一幀都重新下載與啟動辨識引擎。
+ */
+export async function createPriceScanner({
+  onProgress = () => {},
+  createWorkerImpl = createWorker
+} = {}) {
+  let activeProgress = onProgress;
+  let terminated = false;
+
+  activeProgress({ status: 'initializing', progress: 0.1, message: '啟動辨識引擎中...' });
+  const worker = await createWorkerImpl('eng', 1, {
+    logger: (message) => {
+      if (message.status === 'recognizing text') {
+        activeProgress({
+          status: 'recognizing',
+          progress: 0.2 + (message.progress || 0) * 0.75,
+          message: `辨識文字中... (${Math.round((message.progress || 0) * 100)}%)`
+        });
+      }
+    }
+  });
+
+  return {
+    async scan(imageSource, nextOnProgress = onProgress) {
+      if (terminated) throw new Error('辨識引擎已關閉');
+      activeProgress = nextOnProgress;
+      activeProgress({ status: 'processing', progress: 0.15, message: '讀取日幣價格中...' });
+
+      const { data: { text } } = await worker.recognize(imageSource);
+      const detectedPrices = extractPricesFromText(text);
+      activeProgress({ status: 'complete', progress: 1, message: '辨識完成！' });
+      return { rawText: text, detectedPrices };
+    },
+
+    async terminate() {
+      if (terminated) return;
+      terminated = true;
+      await worker.terminate();
+    }
+  };
+}
+
+/**
  * 辨識圖片中的日文字與數字，並自動萃取可能的價格數字
  * @param {string | File} imageSource
  * @param {Function} onProgress 回報進度回呼函式
  * @returns {Promise<{ rawText: string, detectedPrices: Array<{ amount: number, label: string }> }>}
  */
 export async function scanPriceFromImage(imageSource, onProgress = () => {}) {
-  let worker = null;
+  let scanner = null;
   try {
-    onProgress({ status: 'initializing', progress: 0.1, message: '啟動辨識引擎中...' });
-
-    worker = await createWorker('eng', 1, {
-      logger: m => {
-        if (m.status === 'recognizing text') {
-          onProgress({
-            status: 'recognizing',
-            progress: 0.2 + (m.progress || 0) * 0.75,
-            message: `辨識文字中... (${Math.round((m.progress || 0) * 100)}%)`
-          });
-        }
-      }
-    });
-
-    onProgress({ status: 'processing', progress: 0.9, message: '解析日幣價格數字中...' });
-
-    const { data: { text } } = await worker.recognize(imageSource);
-    await worker.terminate();
-    worker = null;
-
-    // 解析文字中的價格標籤與數字
-    const detectedPrices = extractPricesFromText(text);
-
-    onProgress({ status: 'complete', progress: 1.0, message: '辨識完成！' });
-
-    return {
-      rawText: text,
-      detectedPrices
-    };
+    scanner = await createPriceScanner({ onProgress });
+    return await scanner.scan(imageSource, onProgress);
   } catch (err) {
     console.error('OCR Error:', err);
-    if (worker) {
-      try { await worker.terminate(); } catch (e) {}
-    }
     throw err;
+  } finally {
+    if (scanner) {
+      try { await scanner.terminate(); } catch (e) {}
+    }
   }
 }
 
