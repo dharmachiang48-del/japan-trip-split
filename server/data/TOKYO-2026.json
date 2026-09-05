@@ -1,0 +1,94 @@
+{
+  "tripTitle": "2026 日本東京自由行 🎌",
+  "members": [
+    {
+      "id": "mem_1",
+      "name": "小明",
+      "avatarColor": "#3B82F6"
+    },
+    {
+      "id": "mem_2",
+      "name": "小華",
+      "avatarColor": "#EC4899"
+    },
+    {
+      "id": "mem_3",
+      "name": "美美",
+      "avatarColor": "#10B981"
+    },
+    {
+      "id": "mem_1788576944655",
+      "name": "李偉",
+      "avatarColor": "#1E293B",
+      "avatarImage": "/avatars/shiba.jpg"
+    }
+  ],
+  "expenses": [
+    {
+      "id": "exp_1788576989415",
+      "title": "西瓜卡",
+      "amount": 224,
+      "currency": "JPY",
+      "rate": 0.2026,
+      "category": "food",
+      "payerId": "mem_2",
+      "splitMemberIds": [
+        "mem_1",
+        "mem_2",
+        "mem_3",
+        "mem_1788576944655"
+      ],
+      "date": "2026-09-05",
+      "note": ""
+    },
+    {
+      "id": "exp_1",
+      "title": "一蘭拉麵 (澀谷店)",
+      "amount": 3960,
+      "currency": "JPY",
+      "rate": 0.215,
+      "payerId": "mem_1",
+      "splitMemberIds": [
+        "mem_1",
+        "mem_2",
+        "mem_3"
+      ],
+      "category": "food",
+      "date": "2026-09-04",
+      "note": "包含加麵與溫泉蛋"
+    },
+    {
+      "id": "exp_2",
+      "title": "東京晴空塔觀景台門票",
+      "amount": 2160,
+      "currency": "TWD",
+      "rate": 1,
+      "payerId": "mem_2",
+      "splitMemberIds": [
+        "mem_1",
+        "mem_2",
+        "mem_3"
+      ],
+      "category": "ticket",
+      "date": "2026-09-03",
+      "note": "Klook 刷卡台幣預訂"
+    },
+    {
+      "id": "exp_3",
+      "title": "新幹線東京往京都車票",
+      "amount": 42000,
+      "currency": "JPY",
+      "rate": 0.215,
+      "payerId": "mem_3",
+      "splitMemberIds": [
+        "mem_1",
+        "mem_2",
+        "mem_3"
+      ],
+      "category": "traffic",
+      "date": "2026-09-05",
+      "note": "綠色車廂指定席"
+    }
+  ],
+  "lastUpdated": "2026-09-05T02:43:21.229Z"
+}
