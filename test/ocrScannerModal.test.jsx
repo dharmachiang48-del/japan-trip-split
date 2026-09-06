@@ -283,7 +283,64 @@ test('a changed live price clears the previously accepted amount', async () => {
   renderer.unmount();
 });
 
-test('live mode never unlocks secondary prices that were not stabilized', async () => {
+test('live mode keeps a newly appearing secondary price locked', async () => {
+  const stream = { getTracks: () => [{ stop: () => {} }] };
+  Object.defineProperty(globalThis, 'navigator', {
+    configurable: true,
+    value: { mediaDevices: { getUserMedia: async () => stream } }
+  });
+  let scanCalls = 0;
+  let resolveSecondScan;
+  const secondScanSeen = new Promise((resolve) => { resolveSecondScan = resolve; });
+  const results = [
+    { rawText: '¥980', detectedPrices: [{ amount: 980 }] },
+    { rawText: '¥980 ¥500', detectedPrices: [{ amount: 980 }, { amount: 500 }] }
+  ];
+
+  let renderer;
+  await act(async () => {
+    renderer = TestRenderer.create(
+      <OcrScannerModal
+        isOpen
+        onClose={() => {}}
+        currentRate={0.215}
+        onSelectPriceForExpense={() => {}}
+        onAskAiWithPhoto={() => {}}
+        liveScanIntervalMs={1}
+        createLiveScanner={async () => ({
+          scan: async () => {
+            scanCalls += 1;
+            if (scanCalls === 2) resolveSecondScan();
+            return results[scanCalls - 1] || new Promise(() => {});
+          },
+          terminate: async () => {}
+        })}
+      />,
+      {
+        createNodeMock: (element) => {
+          if (element.type === 'video') return { srcObject: null, readyState: 2, videoWidth: 100, videoHeight: 100, play: async () => {} };
+          if (element.type === 'canvas') return { getContext: () => ({ drawImage: () => {} }), toDataURL: () => 'frame' };
+          return {};
+        }
+      }
+    );
+  });
+
+  const liveButton = renderer.root.findAllByType('button')
+    .find((button) => textContent(button).includes('立即掃描'));
+  await act(async () => {
+    liveButton.props.onClick();
+    await secondScanSeen;
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+
+  const labels = renderer.root.findAllByType('button').map(textContent);
+  assert.equal(labels.some((label) => label.includes('NT$ 108')), false);
+  assert.equal(labels.some((label) => label.includes('加入帳本')), true);
+  renderer.unmount();
+});
+
+test('live mode shows multiple prices after each one is independently stabilized', async () => {
   const stream = { getTracks: () => [{ stop: () => {} }] };
   Object.defineProperty(globalThis, 'navigator', {
     configurable: true,
@@ -296,6 +353,7 @@ test('live mode never unlocks secondary prices that were not stabilized', async 
     rawText: '¥980 ¥500',
     detectedPrices: [{ amount: 980 }, { amount: 500 }]
   };
+  let addedAmount = null;
 
   let renderer;
   await act(async () => {
@@ -304,7 +362,7 @@ test('live mode never unlocks secondary prices that were not stabilized', async 
         isOpen
         onClose={() => {}}
         currentRate={0.215}
-        onSelectPriceForExpense={() => {}}
+        onSelectPriceForExpense={(expense) => { addedAmount = expense.amount; }}
         onAskAiWithPhoto={() => {}}
         liveScanIntervalMs={1}
         createLiveScanner={async () => ({
@@ -335,8 +393,16 @@ test('live mode never unlocks secondary prices that were not stabilized', async 
   });
 
   const labels = renderer.root.findAllByType('button').map(textContent);
-  assert.equal(labels.some((label) => label.includes('NT$ 108')), false);
-  assert.equal(labels.some((label) => label.includes('加入帳本')), true);
+  assert.equal(labels.some((label) => label.includes('NT$ 211')), true);
+  assert.equal(labels.some((label) => label.includes('NT$ 108')), true);
+
+  const fiveHundredYen = renderer.root.findAllByType('button')
+    .find((button) => textContent(button).includes('NT$ 108'));
+  await act(async () => fiveHundredYen.props.onClick());
+  const addButton = renderer.root.findAllByType('button')
+    .find((button) => textContent(button).includes('加入帳本'));
+  await act(async () => addButton.props.onClick());
+  assert.equal(addedAmount, 500);
   renderer.unmount();
 });
 

@@ -22,6 +22,25 @@ export function updatePriceStability(previous, detectedPrices, requiredMatches =
 }
 
 /**
+ * 分別追蹤同一畫面中的每一個價格；未出現在新畫面的價格會被移除。
+ */
+export function updatePriceCandidatesStability(previousCandidates = [], detectedPrices = [], requiredMatches = 2) {
+  const previousByAmount = new Map(
+    previousCandidates.map((candidate) => [candidate.amount, candidate])
+  );
+
+  return detectedPrices.map((price) => {
+    const previous = previousByAmount.get(price.amount);
+    const consecutiveMatches = previous ? previous.consecutiveMatches + 1 : 1;
+    return {
+      ...price,
+      consecutiveMatches,
+      isStable: consecutiveMatches >= requiredMatches
+    };
+  });
+}
+
+/**
  * 建立可重複使用的 OCR 掃描器。即時相機模式會共用同一個 worker，
  * 避免每一幀都重新下載與啟動辨識引擎。
  */

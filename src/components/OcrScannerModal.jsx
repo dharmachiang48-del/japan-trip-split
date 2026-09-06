@@ -3,14 +3,8 @@ import {
   X, Camera, Upload, Sparkles, Check, AlertCircle,
   RefreshCw, ArrowRight, ScanLine, ChevronLeft
 } from 'lucide-react';
-import { createPriceScanner, updatePriceStability } from '../utils/ocr';
+import { createPriceScanner, updatePriceCandidatesStability } from '../utils/ocr';
 import { formatTWD, formatJPY } from '../utils/currency';
-
-const EMPTY_STABILITY = {
-  candidateAmount: null,
-  consecutiveMatches: 0,
-  stableAmount: null
-};
 
 export function OcrScannerModal({
   isOpen,
@@ -26,7 +20,7 @@ export function OcrScannerModal({
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const liveStreamRef = useRef(null);
-  const priceStabilityRef = useRef(EMPTY_STABILITY);
+  const priceCandidatesRef = useRef([]);
   const photoScannerRef = useRef(null);
   const photoScanVersionRef = useRef(0);
   const fileReaderRef = useRef(null);
@@ -42,7 +36,7 @@ export function OcrScannerModal({
   const [showRawText, setShowRawText] = useState(false);
   const [cameraStatus, setCameraStatus] = useState('idle');
   const [cameraError, setCameraError] = useState('');
-  const [priceStability, setPriceStability] = useState(EMPTY_STABILITY);
+  const [priceCandidates, setPriceCandidates] = useState([]);
 
   const stopLiveCamera = () => {
     liveStreamRef.current?.getTracks().forEach((track) => track.stop());
@@ -72,8 +66,8 @@ export function OcrScannerModal({
     setShowRawText(false);
     setScanProgress(0);
     setScanStatus('');
-    priceStabilityRef.current = EMPTY_STABILITY;
-    setPriceStability(EMPTY_STABILITY);
+    priceCandidatesRef.current = [];
+    setPriceCandidates([]);
   };
 
   const chooseMode = (nextMode) => {
@@ -181,10 +175,17 @@ export function OcrScannerModal({
 
             setRawText(result.rawText);
             setDetectedPrices(result.detectedPrices);
-            const nextStability = updatePriceStability(priceStabilityRef.current, result.detectedPrices);
-            priceStabilityRef.current = nextStability;
-            setPriceStability(nextStability);
-            setSelectedAmount(nextStability.stableAmount);
+            const nextCandidates = updatePriceCandidatesStability(
+              priceCandidatesRef.current,
+              result.detectedPrices
+            );
+            const stableCandidates = nextCandidates.filter((candidate) => candidate.isStable);
+            priceCandidatesRef.current = nextCandidates;
+            setPriceCandidates(nextCandidates);
+            setSelectedAmount((previousAmount) => {
+              const previousStillStable = stableCandidates.some((candidate) => candidate.amount === previousAmount);
+              return previousStillStable ? previousAmount : (stableCandidates[0]?.amount ?? null);
+            });
           } catch (error) {
             if (!cancelled) {
               stopLiveCamera();
@@ -341,21 +342,58 @@ export function OcrScannerModal({
     handleClose();
   };
 
+  const stableLivePrices = priceCandidates.filter((candidate) => candidate.isStable);
+  const pendingLivePrices = priceCandidates.filter((candidate) => !candidate.isStable);
+
   const renderResultPanel = () => (
     <div className="space-y-3">
-      {mode === 'live' && priceStability.candidateAmount && !priceStability.stableAmount && (
+      {mode === 'live' && pendingLivePrices.length > 0 && (
         <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800">
-          正在確認 {formatJPY(priceStability.candidateAmount)}，請保持鏡頭穩定…
+          正在確認 {pendingLivePrices.map((price) => formatJPY(price.amount)).join('、')}，請保持鏡頭穩定…
         </div>
       )}
 
-      {selectedAmount > 0 && (
+      {mode === 'photo' && selectedAmount > 0 && (
         <div className="rounded-3xl border border-rose-200 bg-gradient-to-br from-rose-50 to-orange-50 p-5 text-center shadow-sm">
           <span className="text-xs font-bold tracking-wide text-rose-500">掃描換算結果</span>
           <div className="mt-1 text-3xl font-black text-slate-900">{formatJPY(selectedAmount)}</div>
           <div className="my-1 text-xs text-slate-400">約等於</div>
           <div className="text-3xl font-black text-rose-600">{formatTWD(selectedAmount * currentRate)}</div>
           <div className="mt-2 text-[11px] text-slate-500">目前匯率：1 JPY = NT$ {currentRate.toFixed(4)}</div>
+        </div>
+      )}
+
+      {mode === 'live' && stableLivePrices.length > 0 && (
+        <div>
+          <div className="mb-2 flex items-center justify-between">
+            <span className="text-xs font-bold text-slate-700">已確認的價格</span>
+            <span className="rounded-full bg-emerald-50 px-2 py-1 text-[10px] font-bold text-emerald-700">
+              找到 {stableLivePrices.length} 個
+            </span>
+          </div>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+            {stableLivePrices.map((item) => {
+              const isSelected = selectedAmount === item.amount;
+              return (
+                <button
+                  key={item.amount}
+                  type="button"
+                  onClick={() => setSelectedAmount(item.amount)}
+                  className={`rounded-2xl border p-3 text-left transition-all ${isSelected
+                    ? 'border-rose-500 bg-rose-50 ring-2 ring-rose-500/20'
+                    : 'border-slate-200 bg-white hover:border-slate-300'}`}
+                >
+                  <div className="flex items-center justify-between font-bold text-slate-900">
+                    {formatJPY(item.amount)}
+                    {isSelected && <Check size={15} className="text-rose-600" />}
+                  </div>
+                  <div className="mt-0.5 text-[11px] font-semibold text-rose-600">
+                    {formatTWD(item.amount * currentRate)}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
         </div>
       )}
 
