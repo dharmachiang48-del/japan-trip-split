@@ -19,6 +19,54 @@ Thumbs.db
 # Environment
 .env
 .env.*
+*.env
+*.env.*
+
+# Credentials, tokens, and service-account files
+secrets/
+.secrets/
+credentials/
+credentials.json
+credentials.*.json
+client_secret*.json
+service-account*.json
+service_account*.json
+firebase-adminsdk*.json
+google-credentials*.json
+secrets.json
+tokens.json
+token.txt
+passwords.*
+
+# Private keys and signing stores
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+*.mobileprovision
+id_rsa
+id_rsa.*
+id_ed25519
+id_ed25519.*
+id_ecdsa
+id_ecdsa.*
+
+# Local package-manager and cloud credentials
+.npmrc
+.pypirc
+.netrc
+.aws/
+.gcloud/
+.azure/
+
+# Local databases and backups
+*.db
+*.sqlite
+*.sqlite3
+*.dump
+*.backup
 
 # AI / Local caches
 .gemini
